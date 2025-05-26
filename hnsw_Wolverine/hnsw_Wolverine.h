@@ -130,19 +130,7 @@ void readGroundTruth(int32_t &groundtruth_sum,int32_t &groundtruth_dim,uint32_t*
 
 template <typename dist_t>
 void creat_index(hnswlib::HierarchicalNSW<dist_t>*& alg_hnsw,string index_prefix,hnswlib::L2Space *space,int M,int ef,int32_t dim,int32_t max_elements,dist_t* data,int num_threads){
-    #ifdef LAYER0
-    index_prefix+="_R0";
-    #endif
-
-    #ifdef NSW
-    string index_path=index_prefix+".nswindex";
-    #elif defined TestVamana
-    string index_path=index_prefix+".vamanaindex";
-    #elif defined NSG
-    string index_path=index_prefix+".hnswnsgindex";
-    #else
     string index_path=index_prefix+".hnswindex";
-    #endif
     
     if(access(index_path.c_str(),F_OK)==0){
         cout<<"read index: "<<index_path<<endl;
@@ -339,18 +327,18 @@ vector<pair<pair<tableint,tableint>,size_t>> getNewEdge(hnswlib::HierarchicalNSW
 }
 
 void show_progress_bar(int progress, int total) {
-    const int bar_width = 100;  // 进度条的宽度
-    float progress_percentage = (float)progress / total;  // 计算进度百分比
-    int pos = bar_width * progress_percentage;  // 计算已完成的进度部分
+    const int bar_width = 100;
+    float progress_percentage = (float)progress / total;
+    int pos = bar_width * progress_percentage;
 
     std::cout << "\r[";
     for (int i = 0; i < bar_width; ++i) {
         if (i < pos)
-            std::cout << "#";  // 显示进度
+            std::cout << "#";
         else
-            std::cout << " ";  // 显示剩余部分
+            std::cout << " ";
     }
 
     std::cout << "] " << int(progress_percentage * 100.0) << "%";
-    std::flush(std::cout);  // 强制刷新输出，确保进度条及时更新
+    std::flush(std::cout);
 }

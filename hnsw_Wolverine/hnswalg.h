@@ -1,12 +1,3 @@
-// #define TestVamana 1.2
-// #define NSW
-
-// #define moreLink
-
-#if (defined TestVamana)||(defined NSW)||(defined NSG)
-#define LAYER0
-#endif
-
 #pragma once
 
 #include "visited_list_pool.h"
@@ -130,11 +121,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             M_ = 10000;
         }
         maxM_ = M_;
-        #ifdef LAYER0
-        maxM0_ = M_;
-        #else
         maxM0_ = M_ * 2;
-        #endif
         
         ef_construction_ = std::max(ef_construction, M_);
         ef_ = 10;
@@ -719,12 +706,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                         fstdistfunc_(getDataByInternalId(second_pair.second),
                                         getDataByInternalId(curent_pair.second),
                                         dist_func_param_);
-                #ifdef TestVamana
-                if (curdist*TestVamana < dist_to_query)
-                #else
-                if (curdist < dist_to_query)
-                #endif
-                {
+                if (curdist < dist_to_query){
                     good = false;
                     break;
                 }
@@ -1280,11 +1262,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         }
 
         std::unique_lock <std::mutex> lock_el(link_list_locks_[cur_c]);
-        #ifdef LAYER0
-        int curlevel = 0;
-        #else
         int curlevel = getRandomLevel(mult_);
-        #endif
         if (level > 0)
             curlevel = level;
 
