@@ -1,15 +1,24 @@
-CXX=g++
-GRAPH=HNSW
-DELETE_MODEL=DM_ATWOHOP
-CXXFLAGS= -I. -std=c++17 -Ofast -pthread -fopenmp -D__AVX__ -mavx2 -D$(GRAPH)
-TARGET=hnsw_Wolverine_test
-SRC=hnsw_Wolverine_test.cpp
+# Compiler settings
+CXX = g++
+CXXFLAGS = -I. -std=c++17 -Ofast -pthread -fopenmp -D__AVX__ -mavx2 -pg
 
+# Default target
+all:
+	@echo "Please specify a target:"
+	@echo "  make hnsw   - Build HNSW version"
+	@echo "  make acorn  - Build ACORN version"
+	@echo "  make clean  - Remove build artifacts"
 
-all: $(TARGET)
+# HNSW version
+hnsw:
+	$(CXX) $(CXXFLAGS) hnsw_Wolverine_test.cpp -o hnsw_test
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) $< -o $@
+# ACORN version  
+acorn:
+	$(CXX) $(CXXFLAGS) acorn_Wolverine_test.cpp -o acorn_test
 
+# Clean
 clean:
-	rm -f $(TARGET)
+	rm -f hnsw_test acorn_test
+
+.PHONY: all hnsw acorn clean

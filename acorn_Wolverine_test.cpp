@@ -1,5 +1,5 @@
-#include "hnsw_Wolverine/hnswlib.h"
-#include "hnsw_Wolverine/hnsw_Wolverine.h"
+#include "hnsw_Wolverine/acornlib.h"
+#include "hnsw_Wolverine/acorn_Wolverine.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -21,20 +21,20 @@ double average(double arr[], int size) {
     return sum / size;
 }
 
-bool predicate_1(const hnswlib::labeltype label) {
+bool predicate_1(const acornlib::labeltype label) {
     return label < 80000;
 }
 
 int main(int argc, char* argv[]) {
-    int32_t dim = 0;                // Dimension of the elements
-    int32_t max_elements = 0;       // Maximum number of elements, should be known beforehand
-    float* data=nullptr;            
-    int32_t query_sum=0;            
-    int32_t query_dim=0;            
-    float* querys=nullptr;          
-    int32_t groundtruth_sum=0;      
-    int32_t groundtruth_dim=0;      
-    uint32_t* groundtruth=nullptr;  
+    int32_t dim = 0;               // Dimension of the elements
+    int32_t max_elements = 0;   // Maximum number of elements, should be known beforehand
+    float* data=nullptr;
+    int32_t query_sum=0;
+    int32_t query_dim=0;
+    float* querys=nullptr;
+    int32_t groundtruth_sum=0;
+    int32_t groundtruth_dim=0;
+    uint32_t* groundtruth=nullptr;
 
     int circul_sum=100;
     float delete_parts=0.05;
@@ -51,12 +51,7 @@ int main(int argc, char* argv[]) {
     int ef=200;
     int num_threads = 64;
     int newLinkSize=M;
-    string deleteModelName[] = {"VIOLENT_DELETE", 
-                                "PINTOPOUT_DELETE", 
-                                "SEARCH_DELETE",
-                                "TWOHOP_DELETE",
-                                "APPROXIMATE_TWOHOP_DELETE",
-                                "REFACTOR_DELETE"};
+    string deleteModelName[]={"VIOLENT_DELETE","PINTOPOUT_DELETE","SEARCH_DELETE","TWOHOP_DELETE","APPROXIMATE_TWOHOP_DELETE","REFACTOR_DELETE"};
 
     if(argc!=13&&argc!=1){
         cout<<"Missing parameters!!!!!!!!!!!!!!  "<<argc<<endl;
@@ -98,7 +93,7 @@ int main(int argc, char* argv[]) {
 
     readInitData<float>(dim,max_elements,data,data_file_path);
     readQuerys<float>(query_sum,query_dim,querys,query_file_path);
-    readGroundTruth<float>(groundtruth_sum,groundtruth_dim,groundtruth,groundtruth_file_path,K,predicate_1);
+    readGroundTruth<float>(groundtruth_sum,groundtruth_dim,groundtruth,groundtruth_file_path,K, predicate_1);
 
     cout << "max_elements: " << max_elements << " dim: " << dim << endl;
     cout << "query_sum: " << query_sum << " query_dim: " << query_dim << endl;
@@ -112,9 +107,9 @@ int main(int argc, char* argv[]) {
     default_random_engine random(seed);
     uniform_int_distribution<size_t> dis1(0, max_elements-1);
 
-    hnswlib::HierarchicalNSW<float>* alg_hnsw = nullptr;
+    acornlib::ACORN<float>* alg_acorn = nullptr;
     hnswlib::L2Space space(dim);
-    creat_index(alg_hnsw,index_prefix,&space,M,ef,dim,max_elements,data,num_threads);
+    creat_index(alg_acorn,index_prefix,&space,M,ef,dim,max_elements,data,num_threads);
 
     double* recalls = (double*) malloc(circul_sum * sizeof(double));
     double* search_OPSs = (double*) malloc(circul_sum * sizeof(double));
@@ -122,39 +117,54 @@ int main(int argc, char* argv[]) {
     double* add_OPSs = (double*) malloc(circul_sum * sizeof(double));
 
     pair<float,double> search_result;
-    std::vector<hnswlib::labeltype> predVector;
-
     
     #ifdef PSEDO
     cout << endl << "psedo_deletion!!!!!!!!!!!" << endl;
-    alg_hnsw->resizeIndex(10000000);
+    alg_acorn->resizeIndex(10000000);
     #endif
-    cout << "maxlevel_: " << alg_hnsw->maxlevel_ << endl;
-
+    
+    cout << "maxlevel_: " << alg_acorn->maxlevel_ << endl;
     cout << "start search" << endl;
-    search_result = search_index_w_postfiltering(alg_hnsw,K,query_sum,query_dim,querys,groundtruth_sum,groundtruth_dim,groundtruth,num_threads,predicate_1);
-    for(int cir_times = 0; cir_times < circul_sum; cir_times++) {
-        
-        search_result = search_index_w_postfiltering(alg_hnsw,K,query_sum,query_dim,querys,groundtruth_sum,groundtruth_dim,groundtruth,num_threads,predicate_1);
-        
-        cout << "cir_times: "  << cir_times << '\t' 
-             << "recall: "     << search_result.first << '\t'
+
+    search_result = search_index(alg_acorn,
+                                 K,
+                                 query_sum,
+                                 query_dim,
+                                 querys,
+                                 groundtruth_sum,
+                                 groundtruth_dim,
+                                 groundtruth,
+                                 num_threads,
+                                 predicate_1);
+    for(int cir_times=0; cir_times<circul_sum; cir_times++){
+        search_result = search_index(alg_acorn,
+                                     K,
+                                     query_sum,
+                                     query_dim,
+                                     querys,
+                                     groundtruth_sum,
+                                     groundtruth_dim,
+                                     groundtruth,
+                                     num_threads,
+                                     predicate_1);
+        cout << "cir_times: " << cir_times << '\t' 
+             << "recall: " << search_result.first << '\t' 
              << "search_OPS: " << search_result.second << " query\\second\t";
         result_writer << search_result.first << ',' << search_result.second << ',';
-        
+
         creat_deleteList(deleteList,max_elements*delete_parts*2,max_elements*delete_parts,random,dis1);
-        write_Vector(deleteList, "deleteList");
+        write_Vector(deleteList,"deleteList");
         #ifdef PSEDO
-        double deleteTime = psedo_deleteIndex(alg_hnsw,deleteList,delete_model,num_threads,newLinkSize);
+        double deleteTime=psedo_deleteIndex(alg_acorn,deleteList,delete_model,num_threads,newLinkSize);
         #else
-        double deleteTime = deleteIndex(alg_hnsw, deleteList, delete_model, num_threads, newLinkSize);
+        double deleteTime=deleteIndex(alg_acorn,deleteList,delete_model,num_threads,newLinkSize);
         #endif
-        cout << "delete_ops: " << deleteTime << " point\\second\t";
-        result_writer << deleteTime << ',';
-        
-        double addTime_avg = addPoint(alg_hnsw, deleteList, num_threads, data, dim);
-        cout << "add_ops: " << addTime_avg << " point\\second" << endl;
-        result_writer << addTime_avg << endl;
+        cout<<"delete_ops: "<<deleteTime<<" point\\second\t";
+        result_writer<<deleteTime<<',';
+
+        double addTime_avg=addPoint(alg_acorn,deleteList,num_threads,data,dim);
+        cout<<"add_ops: "<<addTime_avg<<" point\\second"<<endl;
+        result_writer<<addTime_avg<<endl;
 
         recalls[cir_times] = search_result.first;
         search_OPSs[cir_times] = search_result.second;
@@ -173,7 +183,7 @@ int main(int argc, char* argv[]) {
     delete[] data;
     delete[] querys;
     delete[] groundtruth;
-    delete alg_hnsw;
+    delete alg_acorn;
 
     delete[] recalls;
     delete[] search_OPSs;
@@ -183,7 +193,7 @@ int main(int argc, char* argv[]) {
     data=nullptr;
     querys=nullptr;
     groundtruth=nullptr;
-    alg_hnsw=nullptr;
+    alg_acorn=nullptr;
 
     return 0;
 }

@@ -1,6 +1,8 @@
 #pragma once
+
 #include "space_l2.h"
 #include "space_ip.h"
+#include "hnswlib.h"
 #include <assert.h>
 #include <unordered_map>
 

@@ -85,7 +85,6 @@ L2SqrSIMD16ExtAVX(const void *pVect1v, const void *pVect2v, const void *qty_ptr)
         diff = _mm256_sub_ps(v1, v2);
         sum = _mm256_add_ps(sum, _mm256_mul_ps(diff, diff));
     }
-
     _mm256_store_ps(TmpRes, sum);
     return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] + TmpRes[7];
 }

@@ -73,21 +73,27 @@ inline void ParallelFor(size_t start, size_t end, size_t numThreads, Function fn
 template <typename dist_t>
 void readInitData(int32_t &dim,int32_t &max_elements,dist_t*& data,string data_file_path){
     // read data
+    cout << "READINITDATA: " << max_elements << endl;
     cout<<"Read data"<<endl;
     std::ifstream data_reader(data_file_path, std::ios::binary);
+    cout << "READINITDATA: " << max_elements << endl;
     if(!data_reader.is_open()){
         cout<<"data_reader open failed!!!!"<<endl;
         throw;
     }
+    cout << "READINITDATA: " << max_elements << endl;
     data_reader.read((char*)&max_elements,sizeof(int32_t));
+    cout << "READINITDATA: " << max_elements << endl;
     data_reader.read((char*)&dim,sizeof(int32_t));
     if(max_elements>10000000){
         cout<<"max_elements>10000000"<<endl;
         max_elements=10000000;
     }
+    cout << "READINITDATA: " << max_elements << endl;
     data = new dist_t[dim * max_elements];
     data_reader.read((char*)data, max_elements * dim * sizeof(dist_t));
     data_reader.close();
+    cout << "READINITDATA: " << max_elements << endl;
 }
 
 template <typename dist_t>
@@ -107,24 +113,46 @@ void readQuerys(int32_t &query_sum,int32_t &query_dim,dist_t*& querys,string que
 }
 
 template <typename dist_t>
-void readGroundTruth(int32_t &groundtruth_sum,int32_t &groundtruth_dim,uint32_t*& groundtruth,string groundtruth_file_path,int K){
+void readGroundTruth(int32_t &groundtruth_sum,
+                     int32_t &groundtruth_dim,
+                     uint32_t *&groundtruth,
+                     string groundtruth_file_path,
+                     int K,
+                     bool (*predicate)(const hnswlib::labeltype))
+{
     // Read groundtruth
-    // cout<<"Read groundtruth"<<endl;
     std::ifstream groundtruth_reader(groundtruth_file_path, std::ios::binary);
-    if(!groundtruth_reader.is_open()){
-        cout<<"groundtruth_reader open failed!!!!"<<endl;
+    if (!groundtruth_reader.is_open())
+    {
+        cout << "groundtruth_reader open failed!!!!" << endl;
         throw;
     }
-    groundtruth_reader.read((char*)&groundtruth_sum,sizeof(int32_t));
-    groundtruth_reader.read((char*)&groundtruth_dim,sizeof(int32_t));
-    if(groundtruth==nullptr){
+    groundtruth_reader.read((char *)&groundtruth_sum, sizeof(int32_t));
+    groundtruth_reader.read((char *)&groundtruth_dim, sizeof(int32_t));
+    
+    if (groundtruth == nullptr)
+    {
         groundtruth = new uint32_t[groundtruth_dim * groundtruth_sum];
     }
-    groundtruth_reader.read((char*)groundtruth, groundtruth_sum * groundtruth_dim * sizeof(uint32_t));
+    groundtruth_reader.read((char *)groundtruth, groundtruth_sum * groundtruth_dim * sizeof(uint32_t));
     groundtruth_reader.close();
-    if(groundtruth_dim<K){
-        cout<<"groundtruth_dim too small!!!!"<<endl;
-        throw;
+
+    cout << "Original ground truth dimensions: " << groundtruth_sum << " x " << groundtruth_dim << endl;
+    
+    // Filter in place
+    
+    for (int i = 0; i < groundtruth_sum; i++) {
+        int write_idx = 0;
+        for (int j = 0; j < groundtruth_dim; j++) {
+            uint32_t label = groundtruth[i * groundtruth_dim + j];
+            if (label != hnswlib::INVALID_LABEL && predicate(label)) {
+                groundtruth[i * groundtruth_dim + write_idx] = label;
+                write_idx++;
+            }
+        }
+        for (int j = write_idx; j < groundtruth_dim; j++) {
+            groundtruth[i * groundtruth_dim + j] = hnswlib::INVALID_LABEL;
+        }
     }
 }
 
@@ -153,9 +181,15 @@ void creat_index(hnswlib::HierarchicalNSW<dist_t>*& alg_hnsw,string index_prefix
 }
 
 template <typename dist_t>
-pair<float,double> search_index(hnswlib::HierarchicalNSW<dist_t>* alg_hnsw,int K,
-    int32_t query_sum,int32_t query_dim,dist_t* querys,
-    int32_t groundtruth_sum,int32_t groundtruth_dim,uint32_t* groundtruth,int num_threads){
+pair<float,double> search_index(hnswlib::HierarchicalNSW<dist_t>* alg_hnsw,
+                                int K,
+                                int32_t query_sum,
+                                int32_t query_dim,
+                                dist_t* querys,
+                                int32_t groundtruth_sum,
+                                int32_t groundtruth_dim,
+                                uint32_t* groundtruth,
+                                int num_threads) {
     float correct_sum = 0;
     float* corrects = new float[query_sum];
     memset(corrects,0,query_sum*sizeof(float));
@@ -179,6 +213,7 @@ pair<float,double> search_index(hnswlib::HierarchicalNSW<dist_t>* alg_hnsw,int K
         int groundtruth_search_endp=groundtruth_search_startp+K;
         while (!result[row].empty()){
             hnswlib::labeltype label = result[row].top().second;
+            cout << "label = " << label << endl;
             uint32_t* res=find(groundtruth+groundtruth_search_startp,groundtruth+groundtruth_search_endp,label);
             if(res!=groundtruth+groundtruth_search_endp){
                 corrects[row]+=1;
@@ -191,6 +226,77 @@ pair<float,double> search_index(hnswlib::HierarchicalNSW<dist_t>* alg_hnsw,int K
     }
     float recall = correct_sum / query_sum / K;
     return make_pair(recall,query_sum/search_time_sum);
+}
+
+template <typename dist_t>
+void postfilter(std::priority_queue<std::pair<dist_t, hnswlib::labeltype>> &vecs, 
+                bool (*predicate)(const hnswlib::labeltype)) {
+    std::priority_queue<std::pair<dist_t, hnswlib::labeltype>> filtered;
+    while (!vecs.empty()) {
+        auto element = vecs.top();
+        vecs.pop();        
+        if (predicate(element.second)) {
+            filtered.push(element);
+        }
+    }    
+    vecs = std::move(filtered);
+}
+
+template <typename dist_t>
+pair<float,double> search_index_w_postfiltering(hnswlib::HierarchicalNSW<dist_t>* alg_hnsw,
+                                               int K,
+                                               int32_t query_sum,
+                                               int32_t query_dim,
+                                               dist_t* querys,
+                                               int32_t groundtruth_sum,
+                                               int32_t groundtruth_dim,
+                                               uint32_t* groundtruth,
+                                               int num_threads,
+                                               bool (*predicate)(const hnswlib::labeltype)) {
+    vector<std::priority_queue<std::pair<dist_t, hnswlib::labeltype>>> result(query_sum);
+    
+    // Metadata
+    float correct_sum = 0;
+    float* corrects = new float[query_sum];
+    memset(corrects,0,query_sum*sizeof(float));
+
+    double search_time_sum = 0;
+    double* search_times = new double[query_sum];
+    memset(search_times,0,query_sum*sizeof(double));
+
+    struct timeval search_start_time,search_end_time;
+
+    gettimeofday(&search_start_time,NULL);
+
+    ParallelFor(0, query_sum, num_threads, [&](size_t row, size_t threadId) {
+        result[row] = alg_hnsw->searchKnn((void*)((char*)querys + row * query_dim * sizeof(dist_t)), K);
+        postfilter(result[row], predicate);
+    });
+    gettimeofday(&search_end_time,NULL);
+    search_time_sum = (double) (search_end_time.tv_sec - search_start_time.tv_sec)
+                    + (double) (search_end_time.tv_usec - search_start_time.tv_usec) / 1000000;
+
+    ParallelFor(0, query_sum, num_threads, [&](size_t row, size_t threadId) {
+        int groundtruth_search_startp=row*groundtruth_dim;
+        int groundtruth_search_endp=groundtruth_search_startp+K;
+        while (!result[row].empty()){
+            hnswlib::labeltype label = result[row].top().second;
+            uint32_t* res = find(groundtruth + groundtruth_search_startp,
+                                 groundtruth + groundtruth_search_endp, 
+                                 label);
+            if(res != groundtruth + groundtruth_search_endp){
+                corrects[row] += 1;
+            }
+            result[row].pop();
+        }
+    });
+
+    for(int i=0; i < query_sum; i++) {
+        correct_sum += corrects[i];
+    }
+    float recall = correct_sum / query_sum / K;
+    
+    return make_pair(recall, query_sum / search_time_sum);
 }
 
 void creat_deleteList(vector<size_t>&deleteList,int pre_creat_sum,int list_len,default_random_engine& random,uniform_int_distribution<size_t>& dis1){
